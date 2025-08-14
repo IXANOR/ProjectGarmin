@@ -38,3 +38,13 @@ def use_temp_db(tmp_path, monkeypatch):
     app.dependency_overrides.pop(app_get_session, None)
 
 
+@pytest.fixture(autouse=True)
+def use_temp_chroma(tmp_path, monkeypatch):
+    chroma_dir = tmp_path / "chroma"
+    chroma_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("CHROMA_PATH", str(chroma_dir))
+    # Use fake embeddings backend during tests to avoid model downloads
+    monkeypatch.setenv("EMBEDDINGS_BACKEND", "FAKE")
+    yield
+
+

@@ -33,20 +33,20 @@ Ensuring consistent, deterministic chunking and robust PDF parsing (fallbacks fo
 
 ## Acceptance Criteria
 ### Core Functionality
-- [ ] `POST /api/files` accepts multipart upload with fields:
+- [x] `POST /api/files` accepts multipart upload with fields:
   - `file`: PDF file
   - `session_id` (optional): if omitted → global file
   - Returns: file record with ID and metadata
-- [ ] The uploaded PDF is parsed, chunked (fixed 500 tokens, overlap 50), embedded with `multi-qa-MiniLM-L12-v2`, and stored in ChromaDB persistent index `/data/chroma` with metadata `{ file_id, session_id, chunk_index }`.
-- [ ] `GET /api/files?session_id=...` lists files for the session **and** global files; without query param returns all (for admin/debug).
-- [ ] `DELETE /api/files/{id}` removes the file record and its vectors from ChromaDB.
-- [ ] SQLite table `files` created with columns: `id`, `name`, `session_id` (nullable), `size_bytes`, `created_at`.
+- [x] The uploaded PDF is parsed, chunked (fixed 500 tokens, overlap 50), embedded with `multi-qa-MiniLM-L12-v2`, and stored in ChromaDB persistent index `/data/chroma` with metadata `{ file_id, session_id, chunk_index }`.
+- [x] `GET /api/files?session_id=...` lists files for the session **and** global files; without query param returns all (for admin/debug).
+- [x] `DELETE /api/files/{id}` removes the file record and its vectors from ChromaDB.
+- [x] SQLite table `files` created with columns: `id`, `name`, `session_id` (nullable), `size_bytes`, `created_at`.
 
 ### Integration & Quality
-- [ ] Tests (pytest) written first: upload → parse → chunk → embed → persist; get list; delete.
-- [ ] Proper input validation and 400 errors for non-PDF uploads.
-- [ ] Clean architecture: `app/services/rag.py` (pipeline), `app/api/files.py` (endpoints), `app/models/file.py`.
-- [ ] `.gitignore` includes `/data/chroma/**` (kept locally, not committed).
+- [x] Tests (pytest) written first: upload → parse → chunk → embed → persist; get list; delete.
+- [x] Proper input validation and 400 errors for non-PDF uploads.
+- [x] Clean architecture: `app/services/rag.py` (pipeline), `app/api/files.py` (endpoints), `app/models/file.py`.
+- [x] `.gitignore` includes `/data/chroma/**` (kept locally, not committed).
 
 ## Backend Requirements
 - [ ] **Tests First**
@@ -84,10 +84,27 @@ Ensuring consistent, deterministic chunking and robust PDF parsing (fallbacks fo
 - Dependencies: **Task 001**, **Task 002**, **Task 003**
 
 ## Implementation Summary (Post-Completion)
-[To be filled after completion:]
-- **Files Created/Modified**: `app/models/file.py`, `app/api/files.py`, `app/services/rag.py`, tests under `tests/rag/`  
-- **Key Technical Decisions**: tokenization method for chunking, embedding batch size, Chroma collection naming
-- **API Endpoints**: `POST /api/files`, `GET /api/files`, `DELETE /api/files/{id}`
-- **Components Created**: N/A (backend only in this task)
-- **Challenges & Solutions**: e.g., handling malformed PDFs or large files
-- **Notes for Future Tasks**: wire retrieval into `/api/chat`; add image/audio support; add per-session settings in metadata
+- **Files Created/Modified**:
+  - `app/models/file.py`
+  - `app/api/files.py`
+  - `app/services/rag.py`
+  - `app/main.py` (router registration)
+  - Tests: `tests/rag/test_chunking.py`, `tests/rag/test_embeddings_persistence.py`, `tests/test_files_api.py`, `tests/conftest.py`
+- **Key Technical Decisions**:
+  - Adopted ChromaDB persistent client at `data/chroma` with a single `documents` collection and metadata `{file_id, session_id|GLOBAL, chunk_index}`.
+  - Default embeddings backend is SentenceTransformers `sentence-transformers/multi-qa-MiniLM-L12-v2`; switchable via env (`EMBEDDINGS_BACKEND`, `EMBEDDINGS_MODEL_NAME`, `EMBEDDINGS_DEVICE`). Tests force a deterministic fake backend.
+  - Tokenization by simple whitespace splitting; chunk_size=500, overlap=50 (stride 450) as specified.
+- **API Endpoints**:
+  - `POST /api/files` (multipart) → returns `{ id, name, session_id, size_bytes, created_at }`
+  - `GET /api/files?session_id=...` → lists session files + global
+  - `DELETE /api/files/{id}` → removes SQLite record and Chroma vectors
+- **Challenges & Solutions**:
+  - PDF generation in tests with `fpdf2` required careful line width to avoid rendering exceptions; switched to `pdf.epw` width and safer line lengths.
+  - Chroma metadata disallows `None`; used "GLOBAL" sentinel for global files while keeping API responses with `session_id: null`.
+  - Avoided heavy model downloads in CI by providing a fake embedding backend and test fixture to force it.
+  - Invalid PDF uploads now return 400 with a clear error.
+- **Notes for Future Tasks**:
+  - Wire retrieval into `/api/chat` based on current session_id including global + session-scoped context.
+  - Add size limits, per-session indexing strategy or per-collection partitioning if scale grows.
+  - Support other formats (images/audio) and richer PDF parsing (layout-aware).
+  - Environment Note: On this PC (Windows 11 + AMD GPU), keep `EMBEDDINGS_DEVICE=cpu`. CUDA is NVIDIA-only and ROCm is not supported on Windows for sentence-transformers.
