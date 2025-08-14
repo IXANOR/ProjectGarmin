@@ -219,6 +219,8 @@ checkpoints/
 chroma/
 chroma_db/
 data/
+data/*.db*
+data/*.sqlite*
 storage/
 
 # Frontend build artifacts

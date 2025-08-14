@@ -12,6 +12,8 @@ packages = [
 python = "^3.11"
 fastapi = "^0.111.0"
 uvicorn = {extras = ["standard"], version = "^0.30.0"}
+sqlmodel = "^0.0.22"
+sqlalchemy = "^2.0.30"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"

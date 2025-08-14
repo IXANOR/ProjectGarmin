@@ -2,21 +2,23 @@ import pytest
 import httpx
 
 from app.main import app
-from app.services.session_store import get_history, clear_history
 
 
 @pytest.mark.asyncio
-async def test_chat_sse_streams_tokens_and_stores_history():
-    session_id = "abc123"
-    clear_history(session_id)
-
-    payload = {
-        "session_id": session_id,
-        "messages": [{"role": "user", "content": "Hello"}],
-    }
-
+async def test_chat_sse_streams_tokens_and_persists_in_db():
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create a session first (Task 003 requires existing session_id)
+        create_resp = await client.post("/api/sessions", json={"name": "Test Session"})
+        assert create_resp.status_code == 201
+        session = create_resp.json()
+        session_id = session["id"]
+
+        payload = {
+            "session_id": session_id,
+            "messages": [{"role": "user", "content": "Hello"}],
+        }
+
         async with client.stream("POST", "/api/chat", json=payload) as response:
             assert response.status_code == 200
             assert response.headers["content-type"].startswith("text/event-stream")
@@ -26,11 +28,17 @@ async def test_chat_sse_streams_tokens_and_stores_history():
                 if line.startswith("data: "):
                     tokens.append(line[len("data: "):])
 
-    assert tokens == ["Hello", "from", "mock", "AI!"]
+        assert tokens == ["Hello", "from", "mock", "AI!"]
 
-    history = get_history(session_id)
-    assert len(history) >= 1
-    assert history[-1]["role"] == "user"
-    assert history[-1]["content"] == "Hello"
-
+        # Verify persistence via GET /api/sessions/{id}
+        get_resp = await client.get(f"/api/sessions/{session_id}")
+        assert get_resp.status_code == 200
+        data = get_resp.json()
+        messages = data.get("messages", [])
+        assert len(messages) >= 2
+        # Last two are user then assistant
+        assert messages[-2]["role"] == "user"
+        assert messages[-2]["content"] == "Hello"
+        assert messages[-1]["role"] == "assistant"
+        assert messages[-1]["content"] == "Hello from mock AI!"
 
