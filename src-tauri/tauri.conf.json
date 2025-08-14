@@ -1,0 +1,33 @@
+{
+  "build": {
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
+    "devPath": "http://localhost:5173",
+    "distDir": "../frontend/dist"
+  },
+  "package": {
+    "productName": "Garmin",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "bundle": {
+      "active": false,
+      "targets": ["msi"],
+      "identifier": "com.example.garmin"
+    },
+    "allowlist": {
+      "shell": {
+        "all": false
+      }
+    },
+    "windows": [
+      {
+        "title": "Garmin",
+        "width": 1000,
+        "height": 700
+      }
+    ]
+  }
+}
+
+

@@ -205,3 +205,27 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific ignores
+# Model weights and checkpoints
+models/
+checkpoints/
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+
+# Vector DB / local storage
+chroma/
+chroma_db/
+data/
+storage/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Tauri/Rust build artifacts
+src-tauri/target/
+target/
