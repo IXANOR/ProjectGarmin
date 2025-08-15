@@ -98,6 +98,24 @@ class RagService:
         embeddings = self._embedder.embed(chunks)
         self._collection.add(ids=ids, documents=chunks, metadatas=metadatas, embeddings=embeddings)
 
+    def persist_documents(self, documents: list[str], metadatas: list[dict]) -> None:
+        # Generic persistence that allows custom per-document metadata (e.g., timings)
+        if not documents:
+            return
+        if len(documents) != len(metadatas):
+            raise ValueError("documents and metadatas length mismatch")
+        embeddings = self._embedder.embed(documents)
+        # Generate stable IDs based on file_id and chunk_index when available to avoid collisions
+        ids: list[str] = []
+        for i, meta in enumerate(metadatas):
+            file_id = meta.get("file_id")
+            chunk_index = meta.get("chunk_index", i)
+            if file_id:
+                ids.append(f"{file_id}:{chunk_index}")
+            else:
+                ids.append(f"doc:{i}")
+        self._collection.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
+
     def query(self, text: str, top_k: int = 5, where: Optional[dict] = None) -> list[dict]:
         query_vec = self._embedder.embed([text])
         # Ask Chroma to include distances for scoring if available
