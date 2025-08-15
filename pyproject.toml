@@ -19,6 +19,8 @@ pypdf = "^4.2.0"
 fpdf2 = "^2.7.9"
 python-multipart = "^0.0.9"
 sentence-transformers = "^3.0.1"
+pillow = "^10.4.0"
+pytesseract = "^0.3.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"

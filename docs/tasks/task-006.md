@@ -33,35 +33,35 @@ Files are linked to sessions but can also be global (no session_id).
 
 ## Acceptance Criteria
 ### Core Functionality
-- [ ] `POST /api/images` accepts multipart upload:
+- [x] `POST /api/images` accepts multipart upload:
   - `file`: supported image file.
   - `session_id` (optional).
   - Returns: file record with ID and metadata.
-- [ ] OCR text extracted with Tesseract OCR.
-- [ ] Chunking into 500-token segments with 50-token overlap.
-- [ ] Embedding with `multi-qa-MiniLM-L12-v2` and storing in ChromaDB `/data/chroma`.
-- [ ] Metadata includes `source_type="image"`.
-- [ ] Store original image in `/data/uploads/images/`.
-- [ ] `GET /api/images?session_id=...` lists images for session + global.
-- [ ] `DELETE /api/images/{id}` removes metadata, vectors, and original file.
+- [x] OCR text extracted with Tesseract OCR.
+- [x] Chunking into 500-token segments with 50-token overlap.
+- [x] Embedding with `multi-qa-MiniLM-L12-v2` and storing in ChromaDB `/data/chroma`.
+- [x] Metadata includes `source_type="image"`.
+- [x] Store original image in `/data/uploads/images/`.
+- [x] `GET /api/images?session_id=...` lists images for session + global.
+- [x] `DELETE /api/images/{id}` removes metadata, vectors, and original file.
 
 ### Integration & Quality
-- [ ] Tests (TDD):
-  - OCR extraction returns expected text from sample image.
-  - Chunking & embedding tested for shape and metadata.
+- [x] Tests (TDD):
+  - OCR extraction returns expected text from sample image (monkeypatched to avoid system OCR dependency in CI).
+  - Chunking & embedding tested for shape and metadata (includes `source_type`).
   - API tests for upload, list, delete.
   - Validation for unsupported formats and size limits.
-- [ ] Configurable parameters in `config.py`:
-  - Supported formats.
-  - OCR language(s) — default `eng`.
-  - Max file size.
-- [ ] `.gitignore` excludes `/data/uploads/images/**`.
+- [x] Configurable parameters in `config.py`:
+  - Supported formats via `SUPPORTED_IMAGE_FORMATS` (comma-separated, e.g. `.png,.jpg,.jpeg`).
+  - OCR language(s) via `OCR_LANG` — default `eng`.
+  - Max file size via `IMAGES_MAX_FILE_SIZE_MB` — default `10`.
+- [x] `.gitignore` excludes `/data/uploads/images/**`.
 
 ## Backend Requirements
-- [ ] Use `pytesseract` for OCR; ensure it works cross-platform (Windows 11 support).
-- [ ] Integration with existing ChromaDB persistence.
-- [ ] Reuse chunking/embedding services from PDFs to keep DRY.
-- [ ] Ensure consistent metadata so `/api/chat` RAG retrieval works with PDFs and images seamlessly.
+- [x] Use `pytesseract` for OCR; ensure it works cross-platform (Windows 11 support). Tests use monkeypatch; runtime uses Pillow+pytesseract.
+- [x] Integration with existing ChromaDB persistence.
+- [x] Reuse chunking/embedding services from PDFs to keep DRY.
+- [x] Ensure consistent metadata so `/api/chat` RAG retrieval works with PDFs and images seamlessly.
 
 ## Expected Outcomes
 - **For the user**: Ability to upload images with text and have them included in AI's knowledge base.
@@ -76,10 +76,24 @@ Files are linked to sessions but can also be global (no session_id).
 - Dependencies: **Task 004**, **Task 005**
 
 ## Implementation Summary (Post-Completion)
-[To be filled after completion:]
-- **Files Created/Modified**: `app/api/images.py`, `app/services/ocr.py`, `tests/rag_images/`
-- **Key Technical Decisions**: Tesseract OCR, same embedding model as PDFs, storing originals.
-- **API Endpoints**: `POST /api/images`, `GET /api/images`, `DELETE /api/images/{id}`
-- **Components Created**: OCR service, image upload handler.
-- **Challenges & Solutions**: Cross-platform OCR installation, large image handling.
-- **Notes for Future Tasks**: Add CLIP embeddings, image captioning, multilingual OCR.
+- **Files Created/Modified**:
+  - Created: `app/api/images.py`, `app/services/ocr.py`, `app/core/config.py`, `tests/rag_images/test_ocr_and_embedding.py`, `tests/test_images_api.py`
+  - Modified: `app/services/rag.py` (added `source_type` metadata), `app/main.py` (router include), `.gitignore`, `pyproject.toml`
+- **Key Technical Decisions**:
+  - Reuse existing `RagService` for chunking/embeddings to keep DRY and ensure a unified vector space.
+  - Add optional `source_type` metadata set to `image` for image-origin chunks.
+  - Implement `OcrService` using Pillow + pytesseract with lazy import and test-friendly fallback; OCR language configurable via env.
+  - Centralize image configs in `app/core/config.py` (supported formats, OCR language, max file size).
+- **API Endpoints**:
+  - `POST /api/images` — upload image, OCR, chunk, embed, persist; save original under `/data/uploads/images/`.
+  - `GET /api/images` — list images (session + global).
+  - `DELETE /api/images/{id}` — remove vectors, DB record, and original file.
+- **Components Created**: OCR service, image upload/list/delete handlers, config helpers.
+- **Challenges & Solutions**:
+  - Avoiding hard dependency on system Tesseract in tests → monkeypatch `pytesseract.image_to_string` and lazy-import within `OcrService`.
+  - Ensuring no regressions to PDF RAG or chat flows → full test suite passes.
+  - Handling large files → configurable max size guard with clear 400 error.
+- **Notes for Future Tasks**:
+  - Consider CLIP or multimodal embeddings and image captioning for non-text images.
+  - Add multilingual OCR support and per-request language override.
+  - Extend `/api/chat` to surface citations with `source_type` to differentiate sources if needed.

@@ -222,6 +222,7 @@ data/
 data/*.db*
 data/*.sqlite*
 data/chroma/**
+data/uploads/images/**
 storage/
 
 # Frontend build artifacts

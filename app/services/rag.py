@@ -85,14 +85,16 @@ class RagService:
                 break
         return chunks
 
-    def persist_chunks(self, file_id: str, session_id: Optional[str], chunks: list[str]) -> None:
+    def persist_chunks(self, file_id: str, session_id: Optional[str], chunks: list[str], source_type: str | None = None) -> None:
         if not chunks:
             return
         ids = [f"{file_id}:{i}" for i in range(len(chunks))]
-        metadatas = [
-            {"file_id": file_id, "session_id": (session_id if session_id is not None else "GLOBAL"), "chunk_index": i}
-            for i in range(len(chunks))
-        ]
+        metadatas = []
+        for i in range(len(chunks)):
+            meta = {"file_id": file_id, "session_id": (session_id if session_id is not None else "GLOBAL"), "chunk_index": i}
+            if source_type:
+                meta["source_type"] = source_type
+            metadatas.append(meta)
         embeddings = self._embedder.embed(chunks)
         self._collection.add(ids=ids, documents=chunks, metadatas=metadatas, embeddings=embeddings)
 
