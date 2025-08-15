@@ -29,28 +29,28 @@ It unifies results from different sources into one ranking, while also allowing 
 
 ## Acceptance Criteria
 ### Core Functionality
-- [ ] `/api/chat` can retrieve context from PDFs, images, and audio at once.
-- [ ] Retrieval queries ChromaDB by `source_type` and merges results.
-- [ ] Results are ranked by similarity score, ignoring source type.
-- [ ] Context selection dynamically picks highest-ranked chunks up to 50k token limit.
-- [ ] API accepts `sources` parameter (list of strings), defaults to all sources.
-- [ ] Debug mode outputs separate rankings for each source type.
+- [x] `/api/chat` can retrieve context from PDFs, images, and audio at once.
+- [x] Retrieval queries ChromaDB by `source_type` and merges results.
+- [x] Results are ranked by similarity score, ignoring source type.
+- [x] Context selection dynamically picks highest-ranked chunks up to 50k token limit.
+- [x] API accepts `sources` parameter (list of strings), defaults to all sources.
+- [x] Debug mode outputs separate rankings for each source type.
 
 ### Integration & Quality
-- [ ] Tests (TDD):
+- [x] Tests (TDD):
   - Retrieval returns mixed-source chunks ranked correctly.
   - Filtering by `sources` parameter works.
   - Debug output contains separate rankings.
   - Token budget is respected when mixing sources.
-- [ ] Configurable parameters in `config.py`:
+- [x] Configurable parameters in `config.py`:
   - Token budget (default 50k).
   - Default enabled sources.
 
 ## Backend Requirements
-- [ ] Reuse existing retrieval logic from PDF/image/audio RAG tasks.
-- [ ] Implement merging and sorting by similarity score.
-- [ ] Ensure `source_type` metadata is consistently applied across all entries.
-- [ ] Optimize for parallel querying of multiple source types.
+- [x] Reuse existing retrieval logic from PDF/image/audio RAG tasks.
+- [x] Implement merging and sorting by similarity score.
+- [x] Ensure `source_type` metadata is consistently applied across all entries.
+- [x] Optimize for parallel querying of multiple source types.
 
 ## Expected Outcomes
 - **For the user**: AI can answer questions using information from all available formats at once.
@@ -65,10 +65,25 @@ It unifies results from different sources into one ranking, while also allowing 
 - Dependencies: **Task 004**, **Task 005**, **Task 006**, **Task 007**
 
 ## Implementation Summary (Post-Completion)
-[To be filled after completion:]
-- **Files Created/Modified**: `app/services/rag_multi.py`, `app/api/chat.py`, `tests/rag_multi/`
-- **Key Technical Decisions**: Equal treatment of sources, optional filtering, debug separation of rankings.
-- **API Endpoints**: Updated `/api/chat` to handle `sources` parameter.
-- **Components Created**: Multi-source retrieval service.
-- **Challenges & Solutions**: Efficient merging of large result sets, token budget management.
-- **Notes for Future Tasks**: Add cross-session retrieval, custom weighting of sources.
+**Files Created/Modified**
+- Created: `tests/rag_multi/test_multi_source_retrieval.py`
+- Modified: `app/api/chat.py`, `app/core/config.py`
+
+**Key Technical Decisions**
+- Unified retrieval within `chat` endpoint using existing `RagService`; no separate service module needed.
+- Added `sources` array in request body; defaults to `pdf,image,audio` via `get_default_enabled_sources()`.
+- Emitted `per_source` rankings in SSE debug payload alongside existing `citations`/`chunks` to avoid breaking prior behavior.
+- Cache key includes `sources` to prevent stale mixed results.
+- Token budget enforced with simple per-chunk estimate (≈500 tokens) consistent with prior tasks.
+
+**API Endpoints**
+- `/api/chat` — accepts optional `sources: ["pdf"|"image"|"audio"]` and emits `per_source` in debug output when enabled.
+
+**Challenges & Solutions**
+- Preserving existing SSE token stream and debug schema: kept prior fields and added `per_source` to extend non-invasively.
+- Efficient retrieval across sources: executed session + global queries concurrently, then split/merge by `source_type` with unified ranking.
+- Deterministic testing: used FAKE embeddings backend and isolated Chroma path per test.
+
+**Notes for Future Tasks**
+- Consider custom weighting per source and cross-session retrieval.
+- Improve token counting with real tokenizer; surface citations with `source_type` in model output when model integration lands.

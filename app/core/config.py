@@ -46,3 +46,21 @@ def get_whisper_model_size() -> str:
     return os.getenv("WHISPER_MODEL_SIZE", "base")
 
 
+def get_rag_token_budget() -> int:
+    val = os.getenv("RAG_TOKEN_BUDGET") or "50000"
+    try:
+        return int(val)
+    except ValueError:
+        return 50000
+
+
+def get_default_enabled_sources() -> list[str]:
+    raw = os.getenv("DEFAULT_ENABLED_SOURCES")
+    if raw:
+        vals = [s.strip().lower() for s in raw.split(",") if s.strip()]
+        # keep only known
+        allowed = {"pdf", "image", "audio"}
+        return [v for v in vals if v in allowed] or ["pdf", "image", "audio"]
+    return ["pdf", "image", "audio"]
+
+

@@ -13,6 +13,7 @@ from app.core.db import get_session
 from app.models.session import SessionModel, MessageModel
 from app.models.file import FileModel
 from app.services.rag import RagService
+from app.core.config import get_rag_token_budget, get_default_enabled_sources
 
 
 router = APIRouter()
@@ -41,23 +42,35 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
     db.add(MessageModel(session_id=session_id, role="assistant", content=assistant_full))
     db.commit()
 
-    # RAG retrieval debug payload (Task 005)
+    # RAG retrieval debug payload (Task 005 + Task 008)
     rag_debug_mode = (os.getenv("RAG_DEBUG_MODE") or "true").lower() not in {"0", "false", "no"}
     user_contents = [m.get("content", "") for m in messages if m.get("role", "user") == "user"]
     last_user = user_contents[-1] if user_contents else ""
     rag_top_k_max = int(os.getenv("RAG_TOP_K_MAX") or "40")
-    rag_token_budget = int(os.getenv("RAG_TOKEN_BUDGET") or "50000")
+    rag_token_budget = get_rag_token_budget()
     sim_threshold = float(os.getenv("RAG_SIMILARITY_THRESHOLD") or "0.2")
     cache_ttl_seconds = int(os.getenv("RAG_CACHE_TTL_SECONDS") or "300")
     rag_timeout_seconds = float(os.getenv("RAG_TIMEOUT_SECONDS") or "6")
 
+    # Task 008: supported/allowed sources; default to all
+    DEFAULT_SOURCES = get_default_enabled_sources()
+    sources = payload.get("sources")
+    if isinstance(sources, list) and all(isinstance(s, str) for s in sources):
+        allowed_sources = [s.lower() for s in sources if s]
+        # Only keep known ones; ignore unknown values silently
+        allowed_sources = [s for s in allowed_sources if s in DEFAULT_SOURCES]
+        if not allowed_sources:
+            allowed_sources = DEFAULT_SOURCES
+    else:
+        allowed_sources = DEFAULT_SOURCES
+
     should_skip_rag = len(last_user) < 10
 
-    rag_debug_payload: dict = {"used": False, "citations": [], "chunks": []}
+    rag_debug_payload: dict = {"used": False, "citations": [], "chunks": [], "per_source": {"pdf": [], "image": [], "audio": []}}
     if rag_debug_mode:
         if not should_skip_rag:
             # Try cache first
-            cache_key = (session_id, last_user)
+            cache_key = (session_id, last_user, tuple(allowed_sources))
             now = time.time()
             cached = _RAG_CACHE.get(cache_key)
             if cached and now - cached[0] <= cache_ttl_seconds:
@@ -65,8 +78,10 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
             else:
                 rag = RagService()
                 def _q_session() -> list[dict]:
+                    # Query within session scope (no source filter here; we'll split/filter later)
                     return rag.query(last_user, top_k=rag_top_k_max, where={"session_id": session_id})
                 def _q_global(n: int) -> list[dict]:
+                    # Query within global scope
                     return rag.query(last_user, top_k=n, where={"session_id": "GLOBAL"})
 
                 results_session: list[dict] = []
@@ -91,6 +106,7 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
                                 results_global = []
                 except Exception:
                     results_session, results_global = [], []
+                # Merge session+global first
                 results = results_session + results_global
                 _RAG_CACHE[cache_key] = (now, results)
 
@@ -100,15 +116,53 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
                 rows = db.exec(select(FileModel).where(FileModel.id.in_(list(file_ids)))).all()
                 id_to_name = {row.id: row.name for row in rows}
 
-            # Filter by similarity threshold if present
+            # Split by source_type for Task 008; default missing to "pdf"
+            def _infer_source(meta: dict | None) -> str:
+                if not meta:
+                    return "pdf"
+                st = meta.get("source_type")
+                return (st or "pdf").lower()
+
+            # Apply threshold first
             filtered = [r for r in results if (r.get("score") is None or r.get("score") >= sim_threshold)]
+            per_source: dict[str, list[dict]] = {"pdf": [], "image": [], "audio": []}
+            for r in filtered:
+                src = _infer_source(r.get("metadata"))
+                if src not in per_source:
+                    # Ignore unknown source types in debug
+                    continue
+                per_source[src].append(r)
+
+            # Sort each source list by score desc (None last)
+            def _score_key(item: dict) -> float:
+                s = item.get("score")
+                return s if isinstance(s, (int, float)) else -1.0
+
+            for k in per_source.keys():
+                per_source[k].sort(key=_score_key, reverse=True)
+
+            # Apply source filter: only keep allowed in both per_source and overall selection pool
+            filtered_allowed: list[dict] = []
+            debug_per_source: dict[str, list[dict]] = {"pdf": [], "image": [], "audio": []}
+            for k, vals in per_source.items():
+                if k in allowed_sources:
+                    debug_per_source[k] = [
+                        {"id": v.get("id"), "metadata": v.get("metadata", {}), "score": v.get("score")}
+                        for v in vals
+                    ]
+                    filtered_allowed.extend(vals)
+                else:
+                    debug_per_source[k] = []
+
+            # Build overall selection sorted by score
+            filtered_allowed.sort(key=_score_key, reverse=True)
             if should_skip_rag and not filtered:
-                rag_debug_payload = {"used": False, "citations": [], "chunks": []}
+                rag_debug_payload = {"used": False, "citations": [], "chunks": [], "per_source": debug_per_source}
             else:
                 # Truncate by approximate token budget: assume ~500 tokens per chunk as default
                 approx_tokens_per_chunk = 500
                 max_chunks_by_budget = max(1, rag_token_budget // approx_tokens_per_chunk)
-                selected = filtered[: min(len(filtered), max_chunks_by_budget, rag_top_k_max)]
+                selected = filtered_allowed[: min(len(filtered_allowed), max_chunks_by_budget, rag_top_k_max)]
 
                 citations: list[str] = []
                 chunks_debug: list[dict] = []
@@ -127,7 +181,7 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
                         "score": r.get("score"),
                     })
 
-                rag_debug_payload = {"used": bool(selected), "citations": citations, "chunks": chunks_debug}
+                rag_debug_payload = {"used": bool(selected), "citations": citations, "chunks": chunks_debug, "per_source": debug_per_source}
 
     async def event_stream() -> AsyncGenerator[bytes, None]:
         if rag_debug_mode:
