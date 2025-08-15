@@ -98,14 +98,36 @@ class RagService:
 
     def query(self, text: str, top_k: int = 5, where: Optional[dict] = None) -> list[dict]:
         query_vec = self._embedder.embed([text])
-        result = self._collection.query(query_embeddings=query_vec, n_results=top_k, where=where)
+        # Ask Chroma to include distances for scoring if available
+        try:
+            result = self._collection.query(
+                query_embeddings=query_vec,
+                n_results=top_k,
+                where=where,
+                include=["metadatas", "documents", "distances"],
+            )
+        except TypeError:
+            # Older versions may not support include; fallback
+            result = self._collection.query(query_embeddings=query_vec, n_results=top_k, where=where)
         out: list[dict] = []
-        for i in range(len(result["ids"][0])):
+        ids0 = result.get("ids", [[]])[0]
+        docs0 = result.get("documents", [[]])[0]
+        metas0 = result.get("metadatas", [[]])[0]
+        dists0 = result.get("distances", [[]])
+        dists0 = dists0[0] if dists0 else [None] * len(ids0)
+        for i in range(len(ids0)):
+            dist = dists0[i] if i < len(dists0) else None
+            # Convert distance to a crude similarity in [0,1] if possible
+            if isinstance(dist, (int, float)):
+                sim = max(0.0, 1.0 - float(dist))
+            else:
+                sim = None
             out.append(
                 {
-                    "id": result["ids"][0][i],
-                    "text": result["documents"][0][i],
-                    "metadata": result["metadatas"][0][i],
+                    "id": ids0[i],
+                    "text": docs0[i],
+                    "metadata": metas0[i],
+                    "score": sim,
                 }
             )
         return out
