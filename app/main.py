@@ -8,6 +8,7 @@ from app.api.audio import router as audio_router
 from app.api.system import router as system_router
 from app.api.context import router as context_router
 from app.api.personality import router as personality_router
+from app.api.theme import router as theme_router
 from app.core.db import init_db
 
 
@@ -29,4 +30,5 @@ app.include_router(audio_router, prefix="/api")
 app.include_router(system_router, prefix="/api")
 app.include_router(context_router, prefix="/api")
 app.include_router(personality_router, prefix="/api")
+app.include_router(theme_router, prefix="/api")
 
