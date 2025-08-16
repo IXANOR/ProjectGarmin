@@ -100,3 +100,8 @@ It will track CPU, memory, and GPU utilization, with the ability to switch betwe
 - Multi-GPU selection and per-process resource attribution.
 - Expand AMD/Linux support via `rocm-smi` where applicable.
 - Surface history graph visualization in UI (current implementation maintains data and simple bars; full chart can be added later).
+
+## Verification
+- All acceptance criteria are met by `app/api/system.py`, `app/services/system_monitor.py`, and frontend components/tests.
+- Full test suite (backend + frontend) passes locally; no regressions detected in prior tasks.
+- Integration points verified: system settings endpoints do not clash with existing settings routes; SSE chat unaffected.

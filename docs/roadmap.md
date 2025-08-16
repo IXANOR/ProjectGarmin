@@ -82,11 +82,16 @@
 
 ## Phase 6 – Memory Optimization & Summarization
 **Goal:** Handle long conversations efficiently.  
+**References:** ADR-007 (Conversation Memory and Context Management)
+
 **Tasks (TDD-first):**
-- Write failing test for conversation summarization after X messages.
-- Implement summarization logic and DB storage.
-- Load summaries into context on session resume.
-- Tests for summarization accuracy and performance.
+- Add tests that after N messages a rolling `summary` artifact is created and older turns are compressed.
+- Implement per-session memory artifacts in ChromaDB: `summary`, `facts`, `tools` (see ADR-007).
+- Retrieve top 2–3 memory artifacts per turn under `RAG_PER_TURN_MEMORY_BUDGET_TOKENS` and inject into prompt.
+- Tighten RAG defaults: `RAG_TOP_K_MAX=5`, `RAG_FINAL_TOP_K=3`, chunk 300/overlap 50.
+- Optional: add re-ranking for top 20 and keep best 3.
+- Add `: MEMORY_DEBUG` SSE lines to reveal what memory was injected.
+- Tests for summarization triggers, memory retrieval under budget, and prompt token control.
 
 ---
 

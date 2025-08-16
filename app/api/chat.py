@@ -11,8 +11,10 @@ from sqlmodel import Session, select
 
 from app.core.db import get_session
 from app.models.session import SessionModel, MessageModel
+from app.models.settings import SearchSettingsModel
 from app.models.file import FileModel
 from app.services.rag import RagService
+from app.services.search_service import get_search_service
 from app.core.config import get_rag_token_budget, get_default_enabled_sources
 
 
@@ -191,6 +193,32 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
     async def event_stream() -> AsyncGenerator[bytes, None]:
         if rag_debug_mode:
             yield f": RAG_DEBUG {json.dumps(rag_debug_payload)}\n\n".encode()
+
+        # Task 012: Internet search integration (debug-only comment lines)
+        try:
+            # Load search settings
+            srow = db.get(SearchSettingsModel, 1)
+            allow_search = bool(getattr(srow, "allow_internet_search", False)) if srow else False
+            debug_search = bool(getattr(srow, "debug_logging", False)) if srow else False
+            bing_key = getattr(srow, "bing_api_key", None) if srow else None
+        except Exception:
+            allow_search = False
+            debug_search = False
+            bing_key = None
+
+        search_debug_payload = None
+        if allow_search and last_user and any(k in last_user.lower() for k in ("latest", "news", "update", "recent")):
+            try:
+                search = get_search_service(debug_enabled=debug_search, bing_api_key=bing_key)
+                # Perform async search
+                results = await search.search(last_user)
+                search_debug_payload = {"query": last_user, "results": results[:3]}
+            except Exception:
+                search_debug_payload = {"query": last_user, "results": []}
+
+        if search_debug_payload is not None:
+            yield f": SEARCH_DEBUG {json.dumps(search_debug_payload)}\n\n".encode()
+
         tokens = ["Hello", "from", "mock", "AI!"]
         for token in tokens:
             yield f"data: {token}\n\n".encode()
