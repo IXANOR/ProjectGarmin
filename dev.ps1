@@ -6,6 +6,17 @@ if (-not $root) { $root = Get-Location }
 # Backend (FastAPI) window
 $backendScript = @"
 Set-Location -Path '$root';
+if (Test-Path -LiteralPath '.env') {
+  Get-Content -LiteralPath '.env' | ForEach-Object {
+    if ($_ -match '^\s*#' -or $_ -match '^\s*$') { return }
+    $pair = $_ -split '=', 2
+    if ($pair.Length -eq 2) {
+      $key = $pair[0].Trim()
+      $val = $pair[1].Trim()
+      try { Set-Item -Path ("env:{0}" -f $key) -Value $val -ErrorAction Stop } catch {}
+    }
+  }
+}
 if (Get-Command poetry -ErrorAction SilentlyContinue) {
   poetry install --no-interaction --no-ansi
   poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000

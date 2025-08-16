@@ -53,7 +53,7 @@ async def upload_image(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid or unreadable image uploaded")
     rag = RagService()
-    chunks = rag.chunk_text(text, chunk_size=500, overlap=50)
+    chunks = rag.chunk_text(text, chunk_size=320, overlap=40)
     rag.persist_chunks(file_id=record.id, session_id=session_id, chunks=chunks, source_type="image")
 
     return {

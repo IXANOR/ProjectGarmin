@@ -47,11 +47,11 @@ def get_whisper_model_size() -> str:
 
 
 def get_rag_token_budget() -> int:
-    val = os.getenv("RAG_TOKEN_BUDGET") or "50000"
+    val = os.getenv("RAG_TOKEN_BUDGET") or "12000"
     try:
         return int(val)
     except ValueError:
-        return 50000
+        return 12000
 
 
 def get_default_enabled_sources() -> list[str]:

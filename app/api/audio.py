@@ -59,7 +59,7 @@ async def upload_audio(
 
 	full_text = " ".join(s.get("text", "") for s in segments).strip()
 	rag = RagService()
-	chunks = rag.chunk_text(full_text, chunk_size=500, overlap=50)
+	chunks = rag.chunk_text(full_text, chunk_size=320, overlap=40)
 
 	# Approximate timings per chunk as overall bounds for now
 	start_time = float(segments[0]["start"]) if segments else 0.0

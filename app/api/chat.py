@@ -48,7 +48,7 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
     last_user = user_contents[-1] if user_contents else ""
     rag_top_k_max = int(os.getenv("RAG_TOP_K_MAX") or "40")
     rag_token_budget = get_rag_token_budget()
-    sim_threshold = float(os.getenv("RAG_SIMILARITY_THRESHOLD") or "0.2")
+    sim_threshold = float(os.getenv("RAG_SIMILARITY_THRESHOLD") or "0.25")
     cache_ttl_seconds = int(os.getenv("RAG_CACHE_TTL_SECONDS") or "300")
     rag_timeout_seconds = float(os.getenv("RAG_TIMEOUT_SECONDS") or "6")
 
@@ -160,7 +160,7 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
                 rag_debug_payload = {"used": False, "citations": [], "chunks": [], "per_source": debug_per_source}
             else:
                 # Truncate by approximate token budget: assume ~500 tokens per chunk as default
-                approx_tokens_per_chunk = 500
+                approx_tokens_per_chunk = 350
                 max_chunks_by_budget = max(1, rag_token_budget // approx_tokens_per_chunk)
                 selected = filtered_allowed[: min(len(filtered_allowed), max_chunks_by_budget, rag_top_k_max)]
 

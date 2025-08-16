@@ -37,7 +37,7 @@ async def upload_file(
         text = rag.parse_pdf(data)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid or corrupted PDF uploaded")
-    chunks = rag.chunk_text(text, chunk_size=500, overlap=50)
+    chunks = rag.chunk_text(text, chunk_size=320, overlap=40)
     rag.persist_chunks(file_id=record.id, session_id=session_id, chunks=chunks)
 
     return {
