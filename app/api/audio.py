@@ -64,6 +64,14 @@ async def upload_audio(
 	# Approximate timings per chunk as overall bounds for now
 	start_time = float(segments[0]["start"]) if segments else 0.0
 	end_time = float(segments[-1]["end"]) if segments else 0.0
+	# Try to detect language if provided by model (monkeypatched tests may return in info instead)
+	transcription_language = None
+	try:
+		# If service exposes last language via attribute or segments metadata, capture it
+		# Our service doesn't expose directly; keep None for now
+		pass
+	except Exception:
+		pass
 	metadatas = []
 	for i in range(len(chunks)):
 		m = {
@@ -74,6 +82,8 @@ async def upload_audio(
 			"start_time": start_time,
 			"end_time": end_time,
 		}
+		if transcription_language:
+			m["transcription_language"] = transcription_language
 		metadatas.append(m)
 
 	rag.persist_documents(documents=chunks, metadatas=metadatas)

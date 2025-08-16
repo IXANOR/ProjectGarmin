@@ -112,9 +112,11 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
 
             file_ids = {r.get("metadata", {}).get("file_id") for r in results if r.get("metadata")}
             id_to_name: dict[str, str] = {}
+            soft_deleted_ids: set[str] = set()
             if file_ids:
                 rows = db.exec(select(FileModel).where(FileModel.id.in_(list(file_ids)))).all()
                 id_to_name = {row.id: row.name for row in rows}
+                soft_deleted_ids = {row.id for row in rows if getattr(row, "is_soft_deleted", False)}
 
             # Split by source_type for Task 008; default missing to "pdf"
             def _infer_source(meta: dict | None) -> str:
@@ -123,6 +125,9 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
                 st = meta.get("source_type")
                 return (st or "pdf").lower()
 
+            # Exclude soft-deleted files from RAG context
+            if soft_deleted_ids:
+                results = [r for r in results if r.get("metadata", {}).get("file_id") not in soft_deleted_ids]
             # Apply threshold first
             filtered = [r for r in results if (r.get("score") is None or r.get("score") >= sim_threshold)]
             per_source: dict[str, list[dict]] = {"pdf": [], "image": [], "audio": []}

@@ -1,46 +1,6 @@
 $ErrorActionPreference = "Stop"
-
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $root) { $root = Get-Location }
-
-# Backend (FastAPI) window
-$backendScript = @'
-$ErrorActionPreference = "Stop"
-trap { Write-Host ("Backend error: {0}" -f ($_.Exception.Message)) -ForegroundColor Red; Read-Host 'Press Enter to close this window'; break }
-Set-Location -Path "__ROOT_DIR__";
-if (Test-Path -LiteralPath '.env') {
-  Get-Content -LiteralPath '.env' | ForEach-Object {
-    if ($_ -match '^\s*#' -or $_ -match '^\s*$') { return }
-    $pair = $_ -split '=', 2
-    if ($pair.Length -eq 2) {
-      $key = $pair[0].Trim()
-      $val = $pair[1].Trim()
-      try { Set-Item -Path ("env:{0}" -f $key) -Value $val -ErrorAction Stop } catch {}
-    }
-  }
-}
-if (Get-Command poetry -ErrorAction SilentlyContinue) {
-  poetry install --no-interaction --no-ansi
-  poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-  if ($LASTEXITCODE -ne 0) { Write-Host ("Uvicorn exited with code {0}" -f $LASTEXITCODE) -ForegroundColor Red; Read-Host 'Press Enter to close this window' }
-} else {
-  if (-not (Test-Path -Path '.venv\Scripts\python.exe')) {
-    py -3 -m venv .venv
-  }
-  .\.venv\Scripts\python -m pip install --upgrade pip setuptools wheel
-  .\.venv\Scripts\python -m pip install fastapi 'uvicorn[standard]' sqlmodel sqlalchemy chromadb pypdf python-multipart pillow pytesseract
-  .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-  if ($LASTEXITCODE -ne 0) { Write-Host ("Uvicorn exited with code {0}" -f $LASTEXITCODE) -ForegroundColor Red; Read-Host 'Press Enter to close this window' }
-}
-Read-Host 'Backend window ready. Press Enter to close this window'
-'@
-
-# Frontend (Vite) window
-$frontendDir = Join-Path $root 'frontend'
-$frontendScript = @'
-$ErrorActionPreference = "Stop"
 trap { Write-Host ("Frontend error: {0}" -f ($_.Exception.Message)) -ForegroundColor Red; Read-Host 'Press Enter to close this window'; break }
-Set-Location -LiteralPath '__FRONTEND_DIR__';
+Set-Location -LiteralPath 'C:\Users\igpod\OneDrive\Pulpit\Projekt Garmin\ProjectGarmin\frontend';
 
 # Ensure Node on PATH for this session
 $nodeDir = @(
@@ -122,23 +82,3 @@ if ($LASTEXITCODE -ne 0) {
 & $npm run dev
 if ($LASTEXITCODE -ne 0) { Write-Host ("npm dev exited with code {0}" -f $LASTEXITCODE) -ForegroundColor Red; Read-Host 'Press Enter to close this window' }
 Read-Host 'Frontend window ready. Press Enter to close this window'
-'@
-
-$frontendScript = $frontendScript.Replace("__FRONTEND_DIR__", $frontendDir)
-$backendScript = $backendScript.Replace("__ROOT_DIR__", $root)
-
-# Write to temp .ps1 files to avoid quoting issues
-$tmpDir = Join-Path $root '.dev-scripts'
-if (-not (Test-Path -LiteralPath $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir | Out-Null }
-$backendPs1 = Join-Path $tmpDir 'backend.dev.ps1'
-$frontendPs1 = Join-Path $tmpDir 'frontend.dev.ps1'
-Set-Content -LiteralPath $backendPs1 -Value $backendScript -Encoding UTF8
-Set-Content -LiteralPath $frontendPs1 -Value $frontendScript -Encoding UTF8
-
-Start-Process -FilePath 'cmd.exe' -ArgumentList @('/k', ('pushd "{0}" && powershell -NoProfile -ExecutionPolicy Bypass -File "{1}"' -f $root, $backendPs1))
-Start-Process -FilePath 'cmd.exe' -ArgumentList @('/k', ('pushd "{0}" && powershell -NoProfile -ExecutionPolicy Bypass -File "{1}"' -f $frontendDir, $frontendPs1))
-
-Write-Host "Backend: http://127.0.0.1:8000 (health: /health)" -ForegroundColor Green
-Write-Host "Frontend: http://localhost:5173" -ForegroundColor Green
-
-
