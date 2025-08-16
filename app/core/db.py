@@ -31,11 +31,19 @@ def init_db() -> None:
         try:
             from sqlalchemy import text
             with engine.begin() as conn:
+                # files: add is_soft_deleted if missing
                 rows = conn.exec_driver_sql("PRAGMA table_info(files)").fetchall()
                 col_names = [r[1] for r in rows] if rows else []
                 if "is_soft_deleted" not in col_names:
                     conn.exec_driver_sql(
                         "ALTER TABLE files ADD COLUMN is_soft_deleted BOOLEAN NOT NULL DEFAULT 0"
+                    )
+                # messages: add is_trimmed if missing
+                rows_m = conn.exec_driver_sql("PRAGMA table_info(messages)").fetchall()
+                col_m = [r[1] for r in rows_m] if rows_m else []
+                if "is_trimmed" not in col_m:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE messages ADD COLUMN is_trimmed BOOLEAN NOT NULL DEFAULT 0"
                     )
         except Exception:
             # Best-effort; continue to create tables

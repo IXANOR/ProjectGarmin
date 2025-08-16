@@ -6,6 +6,7 @@ from app.api.files import router as files_router
 from app.api.images import router as images_router
 from app.api.audio import router as audio_router
 from app.api.system import router as system_router
+from app.api.context import router as context_router
 from app.core.db import init_db
 
 
@@ -25,4 +26,5 @@ app.include_router(files_router, prefix="/api")
 app.include_router(images_router, prefix="/api")
 app.include_router(audio_router, prefix="/api")
 app.include_router(system_router, prefix="/api")
+app.include_router(context_router, prefix="/api")
 

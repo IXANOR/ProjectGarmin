@@ -58,6 +58,7 @@ def get_session_detail(session_id: str, db: Session = Depends(get_session)) -> d
                 "id": m.id,
                 "role": m.role,
                 "content": m.content,
+                "is_trimmed": m.is_trimmed,
                 "created_at": m.created_at.isoformat(),
             }
             for m in msgs

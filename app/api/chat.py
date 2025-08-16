@@ -15,6 +15,8 @@ from app.models.settings import SearchSettingsModel
 from app.models.file import FileModel
 from app.services.rag import RagService
 from app.services.search_service import get_search_service
+from app.services.context_manager import ContextManager
+from app.services.token_count import TokenCounter
 from app.core.config import get_rag_token_budget, get_default_enabled_sources
 
 
@@ -39,9 +41,6 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
     # Persist incoming user messages
     for msg in messages:
         db.add(MessageModel(session_id=session_id, role=msg.get("role", "user"), content=msg.get("content", "")))
-    # Persist assistant reply (mock)
-    assistant_full = "Hello from mock AI!"
-    db.add(MessageModel(session_id=session_id, role="assistant", content=assistant_full))
     db.commit()
 
     # RAG retrieval debug payload (Task 005 + Task 008)
@@ -194,6 +193,26 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
         if rag_debug_mode:
             yield f": RAG_DEBUG {json.dumps(rag_debug_payload)}\n\n".encode()
 
+        # Task 013: Context trimming & knowledge capture
+        cm = ContextManager(db)
+        # Count messages and maybe trim
+        # Note: count includes just-persisted user messages (assistant not yet added)
+        num_msgs = len(
+            db.exec(select(MessageModel).where(MessageModel.session_id == session_id)).all()
+        )
+        memory_debug = {"summary_included": False, "knowledge": [], "budget_ok": True}
+        if cm.should_trim(num_msgs):
+            summary = await cm.summarize_and_trim_async(session_id, keep_last_n=10)
+            memory_debug["summary_included"] = bool(summary)
+            # Retrieve top-5 knowledge entries
+            entries = cm.list_knowledge(session_id, limit=5)
+            memory_debug["knowledge"] = [f"{e.key}: {e.value}" for e in entries]
+            # Crude budget check: ensure total injected memory text length is under limit
+            mem_text = (summary or "") + "\n" + "\n".join(memory_debug["knowledge"])
+            approx_tokens = TokenCounter.estimate_tokens(mem_text)
+            memory_debug["budget_ok"] = approx_tokens <= max(1, get_rag_token_budget())
+            yield f": MEMORY_DEBUG {json.dumps(memory_debug)}\n\n".encode()
+
         # Task 012: Internet search integration (debug-only comment lines)
         try:
             # Load search settings
@@ -218,6 +237,11 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
 
         if search_debug_payload is not None:
             yield f": SEARCH_DEBUG {json.dumps(search_debug_payload)}\n\n".encode()
+
+        # Persist assistant reply (mock) after memory handling to keep ordering similar to prior tests
+        assistant_full = "Hello from mock AI!"
+        db.add(MessageModel(session_id=session_id, role="assistant", content=assistant_full))
+        db.commit()
 
         tokens = ["Hello", "from", "mock", "AI!"]
         for token in tokens:
