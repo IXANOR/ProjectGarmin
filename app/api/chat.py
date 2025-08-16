@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from app.core.db import get_session
 from app.models.session import SessionModel, MessageModel
 from app.models.settings import SearchSettingsModel
+from app.services.personality_service import PersonalityService
 from app.models.file import FileModel
 from app.services.rag import RagService
 from app.services.search_service import get_search_service
@@ -212,6 +213,19 @@ async def chat_endpoint(payload: dict, db: Session = Depends(get_session)) -> St
             approx_tokens = TokenCounter.estimate_tokens(mem_text)
             memory_debug["budget_ok"] = approx_tokens <= max(1, get_rag_token_budget())
             yield f": MEMORY_DEBUG {json.dumps(memory_debug)}\n\n".encode()
+
+        # Task 014: Personality adaptation and debug line
+        ps = PersonalityService(db)
+        # Detect/adapt personality from recent messages (lightweight) with throttling to reduce overhead
+        # Throttle: adapt only every 3 user turns (approx by modulo of message count)
+        should_adapt = (num_msgs % 3 == 0)
+        if should_adapt:
+            before, after = ps.adapt_global_profile(session_id)
+        else:
+            before = after = ps.get_current()
+        effective = ps.get_effective_for_session(session_id)
+        # Emit debug line to surface effective profile used for this turn
+        yield f": PERSONALITY_DEBUG {json.dumps({'updated': (before != after), 'profile': effective})}\n\n".encode()
 
         # Task 012: Internet search integration (debug-only comment lines)
         try:
