@@ -14,6 +14,7 @@ type Personality = {
 export const PersonalitySettings: React.FC = () => {
 	const [state, setState] = React.useState<Personality | null>(null)
 	const [loading, setLoading] = React.useState(true)
+  const [profiles, setProfiles] = React.useState<string[]>([])
 
 	React.useEffect(() => {
 		let cancelled = false
@@ -27,6 +28,15 @@ export const PersonalitySettings: React.FC = () => {
 			}
 		}
 		load()
+    ;(async () => {
+      try {
+        const r = await fetch('/api/personality/profiles')
+        if (r.ok) {
+          const j = await r.json()
+          setProfiles(j.profiles || [])
+        }
+      } catch {}
+    })()
 		return () => { cancelled = true }
 	}, [])
 
@@ -39,9 +49,17 @@ export const PersonalitySettings: React.FC = () => {
 	if (loading || !state) return <div>Loading…</div>
 
 	return (
-		<div>
-			<div data-testid="formality">{state.formality}</div>
-			<button data-testid="set-formal" onClick={() => update({ formality: 'formal' })}>Set Formal</button>
+		<div className="space-y-2">
+			<div className="text-sm text-gray-600">Current: <span data-testid="formality">{state.formality}</span></div>
+			<div className="flex flex-wrap gap-2">
+				{profiles.map((p) => (
+					<button key={p} className="px-2 py-1 rounded border" onClick={async () => {
+						await fetch('/api/personality', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile: p }) })
+						const res = await fetch('/api/personality')
+						setState(await res.json())
+					}}>{p}</button>
+				))}
+			</div>
 		</div>
 	)
 }

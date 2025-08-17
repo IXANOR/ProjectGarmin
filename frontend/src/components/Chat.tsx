@@ -61,7 +61,7 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="border rounded p-3 min-h-24">
+      <div className="border rounded p-3 min-h-24" style={{ background: 'var(--app-panel)' }}>
         {messages.map((m, i) => (
           <div key={i} data-testid={m.role === 'assistant' ? 'assistant-message' : undefined}>
             <strong>{m.role}:</strong> {m.content}
@@ -75,7 +75,7 @@ export default function Chat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
-        <button className="border rounded px-3 py-1" onClick={sendMessage}>Send</button>
+        <button className="border rounded px-3 py-1" style={{ background: 'var(--app-panel)', borderColor: 'var(--app-border)' }} onClick={sendMessage}>Send</button>
       </div>
     </div>
   )

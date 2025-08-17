@@ -45,6 +45,43 @@ def init_db() -> None:
                     conn.exec_driver_sql(
                         "ALTER TABLE messages ADD COLUMN is_trimmed BOOLEAN NOT NULL DEFAULT 0"
                     )
+                # themesettingsmodel: add panel_color / border_color if missing
+                rows_t = conn.exec_driver_sql("PRAGMA table_info(themesettingsmodel)").fetchall()
+                col_t = [r[1] for r in rows_t] if rows_t else []
+                if "panel_color" not in col_t:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE themesettingsmodel ADD COLUMN panel_color TEXT DEFAULT '#ffffff'"
+                    )
+                if "border_color" not in col_t:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE themesettingsmodel ADD COLUMN border_color TEXT DEFAULT '#e5e7eb'"
+                    )
+                # themepresetmodel: add panel_color / border_color if missing
+                rows_tp = conn.exec_driver_sql("PRAGMA table_info(themepresetmodel)").fetchall()
+                col_tp = [r[1] for r in rows_tp] if rows_tp else []
+                if "panel_color" not in col_tp:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE themepresetmodel ADD COLUMN panel_color TEXT DEFAULT '#ffffff'"
+                    )
+                if "border_color" not in col_tp:
+                    conn.exec_driver_sql(
+                        "ALTER TABLE themepresetmodel ADD COLUMN border_color TEXT DEFAULT '#e5e7eb'"
+                    )
+                # globals default max_tokens/frequency_penalty migration if row exists with old defaults
+                rows_g = conn.exec_driver_sql("PRAGMA table_info(globalsettingsmodel)").fetchall()
+                # Attempt a safe default upgrade for existing row with legacy defaults
+                try:
+                    cur = conn.exec_driver_sql("SELECT id, max_tokens, frequency_penalty FROM globalsettingsmodel WHERE id=1").fetchone()
+                    if cur is not None:
+                        cur_max = cur[1]
+                        cur_freq = cur[2]
+                        # If old defaults detected, upgrade them
+                        if cur_max == 1024:
+                            conn.exec_driver_sql("UPDATE globalsettingsmodel SET max_tokens=12000 WHERE id=1")
+                        if cur_freq == 0.0:
+                            conn.exec_driver_sql("UPDATE globalsettingsmodel SET frequency_penalty=1.1 WHERE id=1")
+                except Exception:
+                    pass
         except Exception:
             # Best-effort; continue to create tables
             pass

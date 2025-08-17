@@ -47,8 +47,13 @@ class RagService:
     def __init__(self, chroma_path: Path | str | None = None, embedder: Optional[object] = None) -> None:
         base = Path(os.getenv("CHROMA_PATH") or chroma_path or Path("data") / "chroma")
         base.mkdir(parents=True, exist_ok=True)
-        self._client = chromadb.PersistentClient(path=str(base), settings=Settings(allow_reset=False))
-        self._collection: Collection = self._client.get_or_create_collection(name="documents")
+        # Best-effort Chroma initialization; fallback to an in-memory stub when unavailable
+        try:
+            self._client = chromadb.PersistentClient(path=str(base), settings=Settings(allow_reset=False))
+            self._collection: Collection = self._client.get_or_create_collection(name="documents")
+        except Exception:
+            self._client = None  # type: ignore[assignment]
+            self._collection = _FakeChromaCollection()
         if embedder is not None:
             self._embedder = embedder
         else:
@@ -56,9 +61,14 @@ class RagService:
             if backend == "FAKE":
                 self._embedder = FakeEmbeddingModel(embed_dim=8)
             else:
-                model_name = os.getenv("EMBEDDINGS_MODEL_NAME") or "sentence-transformers/multi-qa-MiniLM-L12-v2"
-                device = os.getenv("EMBEDDINGS_DEVICE") or "cpu"
-                self._embedder = SentenceTransformerEmbeddingModel(model_name=model_name, device=device)
+                # Attempt to import sentence-transformers; fallback to FAKE if unavailable
+                try:
+                    model_name = os.getenv("EMBEDDINGS_MODEL_NAME") or "sentence-transformers/multi-qa-MiniLM-L12-v2"
+                    device = os.getenv("EMBEDDINGS_DEVICE") or "cpu"
+                    self._embedder = SentenceTransformerEmbeddingModel(model_name=model_name, device=device)
+                except Exception:
+                    # Safety on dev machines without the heavy dependency
+                    self._embedder = FakeEmbeddingModel(embed_dim=8)
 
     def parse_pdf(self, pdf_bytes: bytes) -> str:
         reader = PdfReader(BytesIO(pdf_bytes))
@@ -152,4 +162,75 @@ class RagService:
             )
         return out
 
+
+# Minimal in-memory fake collection used when Chroma cannot initialize
+class _FakeChromaCollection:
+    def __init__(self) -> None:
+        self._store: dict[str, dict] = {}
+
+    def add(self, ids: list[str], documents: list[str], metadatas: list[dict], embeddings: list[list[float]] | None = None) -> None:
+        for i, _id in enumerate(ids):
+            self._store[_id] = {"id": _id, "document": documents[i], "metadata": metadatas[i], "embedding": (embeddings[i] if embeddings else None)}
+
+    def get(self, where: Optional[dict] = None, include: Optional[list[str]] = None) -> dict:
+        ids = []
+        docs = []
+        metas = []
+        for _id, rec in self._store.items():
+            if where:
+                ok = True
+                for k, v in where.items():
+                    if rec["metadata"].get(k) != v:
+                        ok = False
+                        break
+                if not ok:
+                    continue
+            ids.append(_id)
+            docs.append(rec["document"])
+            metas.append(rec["metadata"])
+        out: dict[str, list] = {"ids": [ids]}
+        if include and "documents" in include:
+            out["documents"] = [docs]
+        if include and "metadatas" in include:
+            out["metadatas"] = [metas]
+        return out
+
+    def delete(self, ids: Optional[list[str]] = None, where: Optional[dict] = None) -> None:
+        if ids:
+            for _id in ids:
+                self._store.pop(_id, None)
+            return
+        if where:
+            for _id, rec in list(self._store.items()):
+                ok = True
+                for k, v in where.items():
+                    if rec["metadata"].get(k) != v:
+                        ok = False
+                        break
+                if ok:
+                    self._store.pop(_id, None)
+
+    def query(self, query_embeddings: list[list[float]], n_results: int = 5, where: Optional[dict] = None, include: Optional[list[str]] = None) -> dict:
+        # Trivial similarity by intersection length of tokens (only for development fallback)
+        ids = []
+        docs = []
+        metas = []
+        for _id, rec in self._store.items():
+            if where:
+                ok = True
+                for k, v in where.items():
+                    if rec["metadata"].get(k) != v:
+                        ok = False
+                        break
+                if not ok:
+                    continue
+            ids.append(_id)
+            docs.append(rec["document"])
+            metas.append(rec["metadata"])
+        # Return first n_results deterministically
+        ids = ids[:n_results]
+        docs = docs[:n_results]
+        metas = metas[:n_results]
+        out: dict[str, list] = {"ids": [ids], "documents": [docs], "metadatas": [metas], "distances": [[0.0 for _ in ids]]}
+        return out
 

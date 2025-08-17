@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.core.db import get_session
 from app.models.settings import GlobalSettingsModel, SessionSettingsModel, SearchSettingsModel
@@ -17,7 +18,15 @@ def _get_or_create_global(db: Session) -> GlobalSettingsModel:
 	if not row:
 		row = GlobalSettingsModel(id=1)
 		db.add(row)
-		db.commit()
+		try:
+			db.commit()
+		except IntegrityError:
+			db.rollback()
+			row = db.get(GlobalSettingsModel, 1)  # fetch if created concurrently
+		if row is None:
+			row = GlobalSettingsModel(id=1)
+			db.add(row)
+			db.commit()
 		db.refresh(row)
 	return row
 
@@ -27,7 +36,15 @@ def _get_or_create_search(db: Session) -> SearchSettingsModel:
 	if not row:
 		row = SearchSettingsModel(id=1)
 		db.add(row)
-		db.commit()
+		try:
+			db.commit()
+		except IntegrityError:
+			db.rollback()
+			row = db.get(SearchSettingsModel, 1)
+		if row is None:
+			row = SearchSettingsModel(id=1)
+			db.add(row)
+			db.commit()
 		db.refresh(row)
 	return row
 

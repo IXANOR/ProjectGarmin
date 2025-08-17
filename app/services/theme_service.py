@@ -13,12 +13,13 @@ from app.models.settings import (
 
 
 BUILT_IN_PRESETS: dict[str, dict[str, str]] = {
-    "light": {"background_color": "#ffffff", "text_color": "#111111", "font_type": "system"},
-    "dark": {"background_color": "#111111", "text_color": "#f5f5f5", "font_type": "system"},
+    "light": {"background_color": "#ffffff", "text_color": "#111111", "panel_color": "#ffffff", "border_color": "#e5e7eb", "font_type": "system"},
+    # Dark: use a dark gray background instead of pure black, with even darker panel for contrast
+    "dark": {"background_color": "#1f2937", "text_color": "#e5e7eb", "panel_color": "#111827", "border_color": "#374151", "font_type": "system"},
 }
 
 
-ALLOWED_KEYS = {"background_color", "text_color", "font_type", "preset_name"}
+ALLOWED_KEYS = {"background_color", "text_color", "panel_color", "border_color", "font_type", "preset_name"}
 ALLOWED_FONTS = {
     "system",
     "arial",
@@ -43,7 +44,25 @@ class ThemeService:
         if not row:
             row = ThemeSettingsModel(id=1)
             self.db.add(row)
-            self.db.commit()
+            try:
+                # Import here to avoid hard dependency at module import time
+                from sqlalchemy.exc import IntegrityError  # type: ignore
+                try:
+                    self.db.commit()
+                except IntegrityError:
+                    self.db.rollback()
+                    row = self.db.get(ThemeSettingsModel, 1)  # type: ignore[assignment]
+            except Exception:
+                # If we cannot import or handle, do a best-effort commit
+                try:
+                    self.db.commit()
+                except Exception:
+                    self.db.rollback()
+                    row = self.db.get(ThemeSettingsModel, 1)  # type: ignore[assignment]
+            if row is None:
+                row = ThemeSettingsModel(id=1)
+                self.db.add(row)
+                self.db.commit()
             self.db.refresh(row)
         return row
 
@@ -52,6 +71,8 @@ class ThemeService:
         return {
             "background_color": row.background_color,
             "text_color": row.text_color,
+            "panel_color": row.panel_color,
+            "border_color": getattr(row, "border_color", "#e5e7eb"),
             "font_type": row.font_type,
             "preset_name": row.preset_name,
         }
@@ -61,7 +82,7 @@ class ThemeService:
         for key, value in payload.items():
             if key not in ALLOWED_KEYS:
                 continue
-            if key in {"background_color", "text_color"}:
+            if key in {"background_color", "text_color", "panel_color", "border_color"}:
                 if isinstance(value, str) and HEX_RE.match(value):
                     setattr(row, key, value)
                 continue
@@ -86,6 +107,8 @@ class ThemeService:
         return {
             "background_color": custom.background_color,
             "text_color": custom.text_color,
+            "panel_color": custom.panel_color,
+            "border_color": getattr(custom, "border_color", "#e5e7eb"),
             "font_type": custom.font_type,
         }
 
@@ -97,6 +120,9 @@ class ThemeService:
             return self.get_current()
         row.background_color = preset["background_color"]
         row.text_color = preset["text_color"]
+        row.panel_color = preset.get("panel_color", row.panel_color)
+        if "border_color" in preset:
+            setattr(row, "border_color", preset["border_color"])  # support migration
         row.font_type = preset["font_type"]
         row.preset_name = name_norm
         self.db.add(row)
@@ -127,6 +153,10 @@ class ThemeService:
             updates["background_color"] = raw_updates["background_color"]
         if isinstance(raw_updates.get("text_color"), str) and HEX_RE.match(raw_updates["text_color"]):
             updates["text_color"] = raw_updates["text_color"]
+        if isinstance(raw_updates.get("panel_color"), str) and HEX_RE.match(raw_updates["panel_color"]):
+            updates["panel_color"] = raw_updates["panel_color"]
+        if isinstance(raw_updates.get("border_color"), str) and HEX_RE.match(raw_updates["border_color"]):
+            updates["border_color"] = raw_updates["border_color"]
         # Validate font
         if isinstance(raw_updates.get("font_type"), str) and raw_updates["font_type"] in ALLOWED_FONTS:
             updates["font_type"] = raw_updates["font_type"]
@@ -150,6 +180,8 @@ class ThemeService:
                     "name": p.name,
                     "background_color": p.background_color,
                     "text_color": p.text_color,
+                    "panel_color": p.panel_color,
+                    "border_color": getattr(p, "border_color", "#e5e7eb"),
                     "font_type": p.font_type,
                 }
                 for p in custom
@@ -160,6 +192,8 @@ class ThemeService:
         name = payload.get("name")
         bg = payload.get("background_color")
         fg = payload.get("text_color")
+        pc = payload.get("panel_color")
+        bc = payload.get("border_color")
         font = payload.get("font_type")
         # Validate name
         if not isinstance(name, str):
@@ -175,6 +209,10 @@ class ThemeService:
             bg = current.background_color
         if fg is None:
             fg = current.text_color
+        if pc is None:
+            pc = getattr(current, "panel_color", "#ffffff")
+        if bc is None:
+            bc = getattr(current, "border_color", "#e5e7eb")
         if font is None:
             font = current.font_type
         # Validate colors and font
@@ -182,16 +220,36 @@ class ThemeService:
             return {"ok": False}
         if not (isinstance(fg, str) and HEX_RE.match(fg)):
             return {"ok": False}
+        if not (isinstance(pc, str) and HEX_RE.match(pc)):
+            return {"ok": False}
+        if not (isinstance(bc, str) and HEX_RE.match(bc)):
+            return {"ok": False}
         if not (isinstance(font, str) and font in ALLOWED_FONTS):
             return {"ok": False}
         existing = self.db.get(ThemePresetModel, name)
         if existing:
             existing.background_color = bg
             existing.text_color = fg
+            existing.panel_color = pc
+            setattr(existing, "border_color", bc)
             existing.font_type = font
             self.db.add(existing)
         else:
-            self.db.add(ThemePresetModel(name=name, background_color=bg, text_color=fg, font_type=font))
+            self.db.add(ThemePresetModel(name=name, background_color=bg, text_color=fg, panel_color=pc, border_color=bc, font_type=font))
+        self.db.commit()
+        return {"ok": True}
+
+    def delete_custom_preset(self, name: str) -> Dict[str, Any]:
+        """Delete a custom preset by name; built-ins cannot be deleted."""
+        if not isinstance(name, str):
+            return {"ok": False}
+        name_norm = name.strip().lower()
+        if name_norm in BUILT_IN_PRESETS:
+            return {"ok": False}
+        row = self.db.get(ThemePresetModel, name)
+        if not row:
+            return {"ok": False}
+        self.db.delete(row)
         self.db.commit()
         return {"ok": True}
 

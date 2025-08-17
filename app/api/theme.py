@@ -62,3 +62,9 @@ def save_custom_preset(payload: dict[str, Any], db: Session = Depends(get_sessio
     return ts.save_custom_preset(payload or {})
 
 
+@router.delete("/theme/presets/{name}")
+def delete_custom_preset(name: str, db: Session = Depends(get_session)) -> dict[str, Any]:
+    ts = ThemeService(db)
+    return ts.delete_custom_preset(name)
+
+

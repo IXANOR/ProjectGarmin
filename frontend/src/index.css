@@ -6,4 +6,64 @@ html, body, #root {
   height: 100%;
 }
 
+.card {
+  border: 1px solid var(--app-border, rgba(0,0,0,0.08));
+  border-radius: 12px;
+  background: var(--app-panel, #fff);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Theme variables applied by ThemeSettings */
+:root {
+  --app-bg: #f3f4f6; /* default light gray */
+  --app-fg: #111827; /* default slate-900 */
+  --app-font: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif;
+  --app-panel: #ffffff; /* default card */
+}
+
+html, body {
+  background: var(--app-bg);
+  color: var(--app-fg);
+  font-family: var(--app-font);
+}
+
+/* Inputs inherit panel color for dark themes */
+input[type="text"], textarea, select {
+  background: var(--app-panel, #fff);
+  color: inherit;
+  border: 1px solid var(--app-border, rgba(0,0,0,0.2));
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+button { border: 1px solid var(--app-border, rgba(0,0,0,0.2)); }
+
+/* Preset pill with integrated delete */
+.preset-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--app-border, rgba(0,0,0,0.2));
+  border-radius: 9999px;
+  overflow: hidden;
+  background: var(--app-panel, #fff);
+}
+.preset-pill > button {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.preset-pill > button.delete {
+  padding: 4px 8px;
+  color: #dc2626;
+}
+.preset-pill > button.delete:hover {
+  background: rgba(220,38,38,0.08);
+}
+
 
